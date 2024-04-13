@@ -124,37 +124,44 @@ def project_masks_on_boxes(gt_masks, boxes, matched_idxs, M):
 
     for box in boxes:
         x1, y1, x2, y2 = box
-
-        # 第一个稀疏矩阵
-        rows_1 = torch.arange(x1, x2) - x1
-        cols_1 = torch.arange(x1, x2)
-        values_1 = torch.ones(x2 - x1)
-        sparse_matrix_1 = torch.sparse_coo_tensor(
-            torch.vstack((rows_1, cols_1)), values_1, (x2 - x1, W)
-        )
+        box = box.to(torch.device("cuda"))
+       # 创建第一个稀疏矩阵
+        # rows_1 = torch.arange(x1.item(), x2.item(), device="cuda") - x1
+        # cols_1 = torch.arange(x1, x2, device="cuda")
+        # values_1 = torch.ones(len(cols_1), device="cuda")
+        # sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(x2 - x1), int(W)))
+        
+        rows_1 = torch.arange(y1.item(), y2.item(), device="cuda") - y1
+        cols_1 = torch.arange(y1, y2, device="cuda")
+        values_1 = torch.ones(len(cols_1), device="cuda")
+        sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(y2 - y1), int(H)))
         sparse_matrices_1.append(sparse_matrix_1)
 
-        # 第二个稀疏矩阵
-        rows_2 = torch.arange(y1, y2)
-        cols_2 = torch.arange(y1, y2) - y1
-        values_2 = torch.ones(y2 - y1)
-        sparse_matrix_2 = torch.sparse_coo_tensor(
-            torch.vstack((rows_2, cols_2)), values_2, (H, y2 - y1)
-        )
-        sparse_matrices_2.append(sparse_matrix_2)
+        # 创建第二个稀疏矩阵
+        # rows_2 = torch.arange(y1.item(), y2.item(), device="cuda")
+        # cols_2 = rows_2 - y1
+        # values_2 = torch.ones(len(cols_2), device="cuda")
+        # sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(H), int(y2 - y1)))
 
+        rows_2 = torch.arange(x1.item(), x2.item(), device="cuda")
+        cols_2 = rows_2 - x1
+        values_2 = torch.ones(len(cols_2), device="cuda")
+        sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(W), int(x2 - x1)))
+        sparse_matrices_2.append(sparse_matrix_2)
     # 对每个深度的gt_mask进行矩阵乘法
     for i in range(len(boxes)):
         # 提取当前深度的gt_mask
-        current_gt_mask = gt_masks.select(0, i)
+        current_gt_mask = gt_masks(i)
 
         # 执行左乘和右乘
         left_result_sparse = torch.sparse.mm(sparse_matrices_1[i], current_gt_mask)
         result_sparse = torch.sparse.mm(left_result_sparse, sparse_matrices_2[i])
     # 转换为稠密矩阵并输出
-    result_dense = result_sparse.to_dense()
+        result_dense = result_sparse.to_dense()
+        print(result_dense)
+        result_dense_all = result_dense.append()
 
-    return roi_align(result_dense, (M, M))[:, 0]
+    return roi_align(result_dense_all, (M, M))[:, 0]
 
 
 def maskrcnn_loss(mask_logits, proposals, gt_masks, gt_labels, mask_matched_idxs):
@@ -166,7 +173,7 @@ def maskrcnn_loss(mask_logits, proposals, gt_masks, gt_labels, mask_matched_idxs
         targets (list[BoxList])
 
     Return:
-        mask_loss (Tensor): scalar tensor containing the loss
+        mask_loss (Tensor): scalar tensor containing the loss 
     """
 
     discretization_size = mask_logits.shape[-1]
@@ -908,7 +915,7 @@ class SparseRoIHeads(nn.Module):
                         raise TypeError(
                             f"target keypoints must of float type, instead got {t['keypoints'].dtype}"
                         )
-
+        
         if self.training:
             (
                 proposals,
@@ -1051,5 +1058,9 @@ class SparseRoIHeads(nn.Module):
                     r["keypoints"] = keypoint_prob
                     r["keypoints_scores"] = kps
             losses.update(loss_keypoint)
+            if "loss_box_reg" in losses:
+                print(losses["loss_box_reg"])
+            else:
+                print("loss_box_reg not calculated in this iteration.")
 
         return result, losses
