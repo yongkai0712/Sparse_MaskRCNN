@@ -168,7 +168,9 @@ class MetricLogger:
                 [header, "[{0" + space_fmt + "}/{1}]", "eta: {eta}", "{meters}", "time: {time}", "data: {data}"]
             )
         MB = 1024.0 * 1024.0
+        print(iterable)
         for obj in iterable:
+            print(obj[1][0]["image_id"])
             data_time.update(time.time() - end)
             yield obj
             iter_time.update(time.time() - end)

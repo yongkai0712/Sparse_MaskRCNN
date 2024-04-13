@@ -1,9 +1,12 @@
 import torchvision
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.mask_rcnn import MaskRCNNPredictor
+from torchvision.models.detection.mask_rcnn import MaskRCNNHeads
+from torchvision.ops import MultiScaleRoIAlign
+from torchvision.models.detection.faster_rcnn import GeneralizedRCNNTransform
 
-from .SparseRoIHead import SparseRoIHeads
-
+from SparseRoIHead import SparseRoIHeads
+from sparse_transform import GeneralizedRCNNTransform_s
 
 def get_model_instance_segmentation(num_classes):
     # load an instance segmentation model pre-trained on COCO
@@ -20,8 +23,16 @@ def get_model_instance_segmentation(num_classes):
     # and replace the mask predictor with a new one
     model.roi_heads.mask_predictor = MaskRCNNPredictor(
         in_features_mask, hidden_layer, num_classes
+        
     )
+    min_size = 800
+    max_size = 1360
 
+
+    image_mean = [0.485, 0.456, 0.406]
+
+    image_std = [0.229, 0.224, 0.225]
+    model.transform = GeneralizedRCNNTransform(min_size, max_size, image_mean, image_std)
     return model
 
 
@@ -34,21 +45,32 @@ def get_sparse_model_instance_segmentation(num_classes):
     model = torchvision.models.detection.maskrcnn_resnet50_fpn(weights="DEFAULT")
 
     roi_heads = SparseRoIHeads(
-        model.roi_heads.box_roi_pool,
-        model.roi_heads.box_head,
-        FastRCNNPredictor(in_features, num_classes),
-        model.roi_heads.fg_iou_thresh,
-        model.roi_heads.bg_iou_thresh,
-        model.roi_heads.batch_size_per_image,
-        model.roi_heads.positive_fraction,
-        model.roi_heads.bbox_reg_weights,
-        model.roi_heads.score_thresh,
-        model.roi_heads.nms_thresh,
-        model.roi_heads.detections_per_img,
-        model.roi_heads.mask_roi_pool,
-        model.roi_heads.mask_head,
-        MaskRCNNPredictor(in_features_mask, 256, num_classes),
+        box_roi_pool = model.roi_heads.box_roi_pool,
+        box_head = model.roi_heads.box_head,
+        box_predictor = FastRCNNPredictor(in_features, num_classes),
+        fg_iou_thresh = 0.5,
+        bg_iou_thresh = 0.5,
+        batch_size_per_image = 512,
+        positive_fraction = 0.25,
+        bbox_reg_weights = None,
+        score_thresh = 0.05,
+        nms_thresh = 0.5,
+        detections_per_img = 100,
+        mask_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=14, sampling_ratio=2),
+        mask_head = None,
+        mask_predictor = MaskRCNNPredictor(256, 256, num_classes)
     )
 
+    min_size = 800
+    max_size = 1360
+
+
+    image_mean = [0.485, 0.456, 0.406]
+
+    image_std = [0.229, 0.224, 0.225]
+    model.transform = GeneralizedRCNNTransform_s(min_size, max_size, image_mean, image_std)
+
     model.roi_heads = roi_heads
+
+    
     return model
