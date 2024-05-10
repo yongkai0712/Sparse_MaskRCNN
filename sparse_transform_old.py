@@ -132,29 +132,7 @@ def mask_interpolate(mask,old_bbox,bbox): #TODO:此处两个循环经过修改�
         current_gt_mask = mask[i]  # 选择当前掩码
         old_box = old_bbox[i]
         new_box = bbox[i]
-                        # print(len(old_bbox))
-                        # print(old_box)
-                        # print(sparse_matrices_1[i])
-                        # print(sparse_matrices_2[i])
-                        # processed_masks = []  # 用于存储每个处理后的稀疏张量
-                        # print(old_box)
-                        # print(current_gt_mask)
-                        #---
-                        
-                        
-                        # import pickle
-                        # with open("old_box.pkl","wb") as f:
-                        #     pickle.dump(old_box, f)
 
-                        # with open("current_gt_mask.pkl","wb") as f:
-                        #     pickle.dump(current_gt_mask, f)
-                        
-                        
-                        #---
-                        # print(i)
-                        # 执行左乘和右乘
-                        # print(sparse_matrices_1[i].shape)
-                        # print(current_gt_mask.shape)
         current_gt_mask = current_gt_mask.to(dtype=torch.float)
         current_gt_mask = current_gt_mask.t()
         left_result_sparse = torch.sparse.mm(sparse_matrices_1[i], current_gt_mask)
@@ -177,10 +155,6 @@ def mask_interpolate(mask,old_bbox,bbox): #TODO:此处两个循环经过修改�
         scale_factor_height = (new_box_height / old_box_height).item()
         # print(scale_factor_width)
 
-                                # # 上采样 processed_mask
-                                # processed_mask_upsampled = F.interpolate(result_dense.unsqueeze(0).unsqueeze(0),
-                                #                                          scale_factor=(scale_factor_height, scale_factor_width),
-                                #                                          mode='bilinear', align_corners=False).squeeze()
 
 
         x1, y1, x2, y2 = map(int, new_box)  # 确保坐标是整数
@@ -208,34 +182,7 @@ def mask_interpolate(mask,old_bbox,bbox): #TODO:此处两个循环经过修改�
         full_mask_sparse = full_mask.to_sparse()
         # print(full_mask_sparse)
         result_mask.append(full_mask_sparse)
-        
-                            # result_m = torch.sparse.cat(result_mask, dim=0)
-                            # print(result_m.shape)
-                            # print(full_mask_sparse)
-        # TODO：打印出裁剪后mask,观察是否存在空mask
-    # print(result_mask)    
-    #TODO:将result_mask由list转换为tensor
-    
-    # all_indices = []
-    # all_values = []
-    
-    # for i,_2d_tensor in enumerate(result_mask):
-    #     indices = _2d_tensor.indices()
-    #     values = _2d_tensor.values()
-        
-    #     depth_indices = torch.full((1,indices.shape[1]),i,dtype=torch.long)
-    #     extendes_indices = torch.cat((depth_indices,indices),dim=0)
-        
-    #     all_indices.append(extendes_indices)
-    #     all_values.append(values)
-        
-    # all_indices = torch.cat(all_indices,dim=1)
-    # all_values = torch.cat(all_values)
-    
-    # num_tensors = len(result_mask)
-    
-    # sparse_result = torch.sparse_coo_tensor(all_indices,all_values,size=(num_tensors,H,W))
-        
+              
     return result_mask
 
 
@@ -295,14 +242,6 @@ def _resize_image_and_masks(old_bbox,
         mask = target["masks"]
         print(mask)
         print(old_bbox[0])
-        # print(mask.layout)
-        # print(mask.shape)
-
-        #---
-        # import pickle
-        # with open("mask.pkl","wb") as f:
-        #     pickle.dump(mask, f)
-        #---
 
         
         mask = mask_interpolate(mask,old_bbox,bbox)

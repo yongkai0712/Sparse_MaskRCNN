@@ -138,7 +138,8 @@ if __name__ == "__main__":
     import matplotlib.patches as patches
     import os
     
-    data = CocoSparseDataset("/home/vik/cell_1360x1024/train", "/home/vik/cell_1360x1024/annotation/fixed_train.json")
+    # data = CocoSparseDataset("/home/vik/cell_1360x1024/train", "/home/vik/cell_1360x1024/annotation/fixed_train.json")
+    data = CocoSparseDataset("/data/disk01/cell/cell_1360x1024/train", "/data/disk01/cell/cell_1360x1024/annotation/train.json")
     data_loader = torch.utils.data.DataLoader(
     data,
     batch_size=1,

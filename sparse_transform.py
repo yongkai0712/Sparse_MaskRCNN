@@ -9,6 +9,18 @@ from torchvision.utils import save_image
 import pickle
 from image_list import ImageList
 
+
+#--
+#检查mask
+# def check_coo_matrix_values(mask):
+#     # 将 mask.values 转换为一个布尔张量，然后使用 torch.all() 检查所有元素是否为 True
+#     if not torch.all(mask.values == 1):
+#         print("Error: Non-unity value found in the matrix.")
+#         return False
+#     return True
+# #--
+
+
 #--
 import time
 #--
@@ -86,41 +98,34 @@ def mask_interpolate(mask, old_bbox, bbox):
     j = len(old_bbox)
     result_mask = []
     # print(mask)
+
     for i in range(j):
+ 
         box = old_bbox[i].to(torch.device("cuda"))
         x1, y1, x2, y2 = box
-        # print(box)
-        # 创建第一个稀疏矩阵
-        # rows_1 = torch.arange(x1.item(), x2.item(), device="cuda") - x1
-        # cols_1 = torch.arange(x1, x2, device="cuda")
-        # values_1 = torch.ones(len(cols_1), device="cuda")
-        # sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(x2 - x1), int(W)))
-        
-        rows_1 = torch.arange(y1.item(), y2.item(), device="cuda") - y1
-        cols_1 = torch.arange(y1, y2, device="cuda")
-        values_1 = torch.ones(len(cols_1), device="cuda")
-        sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(y2 - y1), int(H)))
 
-        # 创建第二个稀疏矩阵
-        # rows_2 = torch.arange(y1.item(), y2.item(), device="cuda")
-        # cols_2 = rows_2 - y1
-        # values_2 = torch.ones(len(cols_2), device="cuda")
-        # sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(H), int(y2 - y1)))
-
-        rows_2 = torch.arange(x1.item(), x2.item(), device="cuda")
-        cols_2 = rows_2 - x1
-        values_2 = torch.ones(len(cols_2), device="cuda")
-        sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(W), int(x2 - x1)))
 
         # 处理掩膜
         current_gt_mask = mask[i].to(dtype=torch.float)
+        current_gt_mask = current_gt_mask.coalesce()
+        row_indices, col_indices = current_gt_mask.indices()
+        # print("Ground Truth Mask:")
         # print(current_gt_mask)
-        left_result_sparse = torch.sparse.mm(sparse_matrix_1, current_gt_mask)
-        result_sparse = torch.sparse.mm(left_result_sparse, sparse_matrix_2)
-        result_dense = result_sparse.to_dense()
+        adjusted_row_indices = row_indices - y1
+        adjusted_col_indices = col_indices - x1
+        # new_size = (y2 - y1, x2 - x1)
+    # 使用新的索引替换原本的索引
+        
+        values_1 = current_gt_mask.values()
+    # 创建新的 sparse tensor，保持原有的值不变
+        result_sparse = torch.sparse_coo_tensor(torch.vstack((adjusted_row_indices, adjusted_col_indices)), values_1, size=(int(y2-y1),int(x2-x1)))
 
+        result_dense = result_sparse.to_dense()
+       
+        
         old_box = old_bbox[i]
         new_box = bbox[i]
+       
         # print(new_box)
         new_box_width = new_box[2] - new_box[0]
         new_box_height = new_box[3] - new_box[1]
@@ -128,21 +133,39 @@ def mask_interpolate(mask, old_bbox, bbox):
         target_height = y2 - y1
         target_width = x2 - x1
 
+        # print(result_sparse)
         # 调整掩膜大小
         processed_mask_upsampled = F.interpolate(result_dense.unsqueeze(0).unsqueeze(0),
                                                  size=(target_height, target_width),
                                                  mode='bilinear', align_corners=False).squeeze().byte()
+        # print('processed_mask')
+        # print(processed_mask_upsampled)
 
         # 创建新的掩膜
         full_mask = torch.zeros((int(H), int(W)), device="cuda")
         full_mask[y1:y2, x1:x2] = processed_mask_upsampled
         full_mask_sparse = full_mask.to_sparse()
         
+        # print("full_mask_sparse")
         # print(full_mask_sparse)
         
         result_mask.append(full_mask_sparse)
+    indices_list = []
+    values_list = []
+    
+    for i, sparse_tensor in enumerate(result_mask):
+        indices = sparse_tensor.indices()
+        values = sparse_tensor.values()
+        new_indices = torch.cat([torch.full((1, indices.shape[1]), i, dtype=torch.long, device=indices.device), indices], dim=0)
+        indices_list.append(new_indices)
+        values_list.append(values)
+    
+    combined_indices = torch.cat(indices_list, dim=1)
+    combined_values = torch.cat(values_list)
+    combined_sparse_tensor = torch.sparse_coo_tensor(indices=combined_indices, values=combined_values, size=(len(result_mask), H, W))
+    # print(combined_sparse_tensor)
+    return combined_sparse_tensor
         
-    return result_mask
 
 
 
@@ -201,6 +224,8 @@ def _resize_image_and_masks(old_bbox,
     if "masks" in target:            #标记：在此处添加读取box信息，然后利用稀疏的上采样函数，进行大小的变换
         mask = target["masks"]
         # print(mask)
+        # if not check_coo_matrix_values(mask):
+        #     raise ValueError("The COO matrix contains non-unity values.")
         # print(old_bbox[0])
         # print(mask.layout)
         # print(mask.shape)
@@ -572,8 +597,9 @@ class GeneralizedRCNNTransform_s(nn.Module):
 
         image_list = ImageList(images, image_sizes_list)
         
-        memory_before = torch.cuda.memory_allocated()
-        print(memory_before)
+        # print(target_index)
+        # memory_before = torch.cuda.memory_allocated()
+        # print(memory_before)
         # save_image(image, 'output_image_300.png')
         
         # with open("targets.pkl","wb") as f:

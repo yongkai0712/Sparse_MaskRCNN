@@ -64,7 +64,7 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 num_classes = 2
 
 dataset = CocoSparseDataset(
-    "/home/vik/cell_1360x1024/train", "/home/vik/cell_1360x1024/annotation/updated_train1.json", get_transform(train=False)
+    "/home/vik/mathor_cup/data/coco/train", "/home/vik/mathor_cup/data/coco/train.json", get_transform(train=False)
 )
 # dataset = CocoDataset(
 #    "/home/vik/cell_1360x1024/train", "/home/vik/cell_1360x1024/annotation/updated_train1.json", get_transform(train=True)
@@ -73,7 +73,7 @@ dataset = CocoSparseDataset(
 
 
 val_data = CocoDataset(
-    '/home/vik/cell_1360x1024/val','/home/vik/cell_1360x1024/annotation/val.json',
+    '/home/vik/mathor_cup/data/coco/val','/home/vik/mathor_cup/data/coco/val.json',
 )
 
 data_loader = torch.utils.data.DataLoader(

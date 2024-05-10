@@ -126,99 +126,58 @@ def project_masks_on_boxes(gt_masks, boxes, matched_idxs, M):
     result_dense_all = []
 
         
-    for i,roi in enumerate(rois):
+    for box in boxes:
         
-        batch_index = roi[0]
         
-        box = roi[1:]
-        print(batch_index)
+        
         
         x1, y1, x2, y2 = box
         box = box.to(torch.device("cuda"))
-        # print("roi_box")
-        # print(box)
        # 创建第一个稀疏矩阵
         # rows_1 = torch.arange(x1.item(), x2.item(), device="cuda") - x1
         # cols_1 = torch.arange(x1, x2, device="cuda")
         # values_1 = torch.ones(len(cols_1), device="cuda")
         # sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(x2 - x1), int(W)))
         
-        # rows_1 = torch.arange(y1.item(), y2.item(), device="cuda") - y1
-        # cols_1 = torch.arange(y1, y2, device="cuda")
-        # values_1 = torch.ones(len(cols_1), device="cuda")
-        # sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(y2 - y1), int(H)))
-        # sparse_matrices_1.append(sparse_matrix_1)
-        
-        
-        # print('sparse_1')
-        # print(sparse_matrix_1)
-        
-        
+        rows_1 = torch.arange(y1.item(), y2.item(), device="cuda") - y1
+        cols_1 = torch.arange(y1, y2, device="cuda")
+        values_1 = torch.ones(len(cols_1), device="cuda")
+        sparse_matrix_1 = torch.sparse_coo_tensor(torch.vstack((rows_1, cols_1)), values_1, size=(int(y2 - y1), int(H)))
+        sparse_matrices_1.append(sparse_matrix_1)
+        # print(sparse_matrices_1)
         # 创建第二个稀疏矩阵
         # rows_2 = torch.arange(y1.item(), y2.item(), device="cuda")
         # cols_2 = rows_2 - y1
         # values_2 = torch.ones(len(cols_2), device="cuda")
         # sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(H), int(y2 - y1)))
 
-        # rows_2 = torch.arange(x1.item(), x2.item(), device="cuda")
-        # cols_2 = rows_2 - x1
-        # values_2 = torch.ones(len(cols_2), device="cuda")
-        # sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(W), int(x2 - x1)))
-        
-        
-        # print('sparse_matrix_2')
-        # print(sparse_matrix_2)
-        
-        
-        # sparse_matrices_2.append(sparse_matrix_2)
+        rows_2 = torch.arange(x1.item(), x2.item(), device="cuda")
+        cols_2 = rows_2 - x1
+        values_2 = torch.ones(len(cols_2), device="cuda")
+        sparse_matrix_2 = torch.sparse_coo_tensor(torch.vstack((rows_2, cols_2)), values_2, size=(int(W), int(x2 - x1)))
+        sparse_matrices_2.append(sparse_matrix_2)
     # 对每个深度的gt_mask进行矩阵乘法
-        # print(gt_masks[int(batch_index.item())])
-        current_gt_mask = gt_masks[int(batch_index.item())]
-        current_gt_mask = mask[i].to(dtype=torch.float)
-        current_gt_mask = current_gt_mask.coalesce()
-        row_indices, col_indices = current_gt_mask.indices()
-        # print("Ground Truth Mask:")
+    for i in range(len(boxes)):
+        # 提取当前深度的gt_mask
+        current_gt_mask = gt_masks[i]
+        # print(boxes[i])
         # print(current_gt_mask)
-        adjusted_row_indices = row_indices - y1
-        adjusted_col_indices = col_indices - x1
-        
-        # print(box)
-        # print("gt_mask")
-        values_1 = current_gt_mask.values()
-    # 创建新的 sparse tensor，保持原有的值不变
-        result_sparse = torch.sparse_coo_tensor(torch.vstack((adjusted_row_indices, adjusted_col_indices)), values_1, size=(int(y2-y1),int(x2-x1)))
-        
-        # print("mask_roi_head")
-        # print(current_gt_mask)
-        
-        
-        # left_result_sparse = torch.sparse.mm(sparse_matrix_1, current_gt_mask)
-        # result_sparse = torch.sparse.mm(left_result_sparse, sparse_matrix_2)
+        # 执行左乘和右乘
+        left_result_sparse = torch.sparse.mm(sparse_matrices_1[i], current_gt_mask)
+        result_sparse = torch.sparse.mm(left_result_sparse, sparse_matrices_2[i])
     # 转换为稠密矩阵并输出
-    
-    
-        # print("result_sparse")
-        # print(result_sparse)
-        
-        
         result_dense = result_sparse.to_dense()
-        result_dense = result_dense.unsqueeze(0)
-        
-        
-        # print('result_dense')
         # print(result_dense)
-        
-        result_dense = roi_align(result_dense, (M, M))
-        result_dense = result_dense.squeeze()
+        result_dense = result_dense.unsqueeze(0)
+        result_dense = roi_align(result_dense, (M, M))[:, 0]
+        # print(result_dense)
         result_dense_all.append(result_dense)
-        # print(result_sparse)
-        # print(result_dense.shape)
+        # print(result_sparse.shape)
+    print(result_dense_all)
     result_dense_all_tensor = torch.cat([x.unsqueeze(0) for x in result_dense_all], dim=0)
     
     # print(result_dense_all_tensor)
     return roi_align(result_dense_all_tensor, (M, M))#[:, 0]
-    
-    
 
 
 def maskrcnn_loss(mask_logits, proposals, gt_masks, gt_labels, mask_matched_idxs):
